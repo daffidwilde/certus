@@ -44,3 +44,8 @@ dev = [
     "ruff>=0.12.8",
 ]
 
+[[tool.uv.index]]
+name = "test"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
