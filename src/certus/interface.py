@@ -1,12 +1,11 @@
 """Module for the log probability interface functions."""
 
-import math
-import google.genai.types
+from google.genai import types
 
-from .node import TokenNode
+from . import node, utils
 
 
-def from_google(result: google.genai.types.Candidate) -> list[TokenNode]:
+def from_google(result: types.LogprobsResult) -> list[node.TokenNode]:
     """
     Extract token nodes from a Google GenAI log-probs result.
 
@@ -20,4 +19,11 @@ def from_google(result: google.genai.types.Candidate) -> list[TokenNode]:
     list[certus.TokenNode]
         Token nodes.
     """
-    return [TokenNode(can.token, can.log_probability) for can in result.chosen_candidates]
+    if result.chosen_candidates is None:
+        return []
+
+    return [
+        node.TokenNode(can.token, utils.clamp(can.log_probability, upper=0.0))
+        for can in result.chosen_candidates
+        if can.token is not None and can.log_probability is not None
+    ]

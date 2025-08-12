@@ -3,6 +3,8 @@
 import dataclasses
 import math
 
+from . import utils
+
 
 @dataclasses.dataclass
 class TokenNode:
@@ -14,18 +16,24 @@ class TokenNode:
     value : str
         Value of the token in the output.
     logprob : float
-        Log probability of the token.
+        Log-probability of the token.
+
+    Attributes
+    ----------
     confidence : float, optional
         Confidence (probability) of the token.
     """
+
     value: str
     logprob: float
-    confidence: float | None = None
 
     def __post_init__(self):
-        if self.confidence is None:
-            self.confidence = self._convert(self.logprob)
+        self._confidence = None
 
-    def _convert(self, logprob):
-        """Convert a log probability to a probability."""
-        return max(0, min(1, math.exp(logprob)))
+    @property
+    def confidence(self) -> float:
+        """Set or return the linear probability of the token."""
+        if self._confidence is None:
+            self._confidence = utils.clamp(math.exp(self.logprob), 0.0, 1.0)
+
+        return self._confidence
