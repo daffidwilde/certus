@@ -12,3 +12,9 @@ wheels/
 # Environment variables
 .env
 
+# Test files
+.coverage
+.hypothesis
+
+# Scratchwork
+scrap/

@@ -9,6 +9,14 @@ requires-python = ">=3.12"
 dependencies = []
 dynamic = ["version"]
 
+[project.optional-dependencies]
+google = [
+    "google-genai>=1.29.0",
+]
+all = [
+    "certus[google]",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -25,7 +33,7 @@ extend-select = ["D", "I", "W"]
 ignore = ["D105", "D107", "D413"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["segroups"]
+known-first-party = ["certus"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -36,6 +44,7 @@ branch = true
 [dependency-groups]
 dev = [
     "hypothesis>=6.137.3",
+    "marimo>=0.14.17",
     "pyright>=1.1.403",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
