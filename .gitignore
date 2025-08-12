@@ -14,4 +14,7 @@ wheels/
 
 # Test files
 .coverage
+.hypothesis
 
+# Scratchwork
+scrap/
