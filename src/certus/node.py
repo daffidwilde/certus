@@ -96,18 +96,28 @@ class CompositeNode:
     def leaves(self) -> list[TokenNode]:
         """Return the leaf nodes downstream of this composite node."""
         if self._leaves is None:
-            self._leaves = self._gather_leaves()
+            self._leaves = _gather_leaves(self)
 
         return self._leaves
 
-    def _gather_leaves(self) -> list[TokenNode]:
-        """Get the leaf nodes downstream of this composite node."""
-        leaves = []
-        for child in self.children:
-            if isinstance(child, TokenNode):
-                leaves.append(child)
-                continue
 
-            leaves.extend(child._gather_leaves())
+def _gather_leaves(node: TokenNode | CompositeNode) -> list[TokenNode]:
+    """
+    Get the leaf nodes downstream of a node.
 
-        return leaves
+    Parameters
+    ----------
+    node : TokenNode or CompositeNode
+        A leaf node or one in which to delve for more.
+
+    Returns
+    -------
+    list of TokenNode
+        Leaf nodes in the composite tree.
+    """
+    if isinstance(node, CompositeNode):
+        return [leaf for child in node.children for leaf in _gather_leaves(child)]
+    if isinstance(node, TokenNode):
+        return [node]
+
+    raise ValueError(f"Invalid node type: {node}, {node.__class__}")
