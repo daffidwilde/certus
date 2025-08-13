@@ -36,7 +36,7 @@ def test_from_google_all_candidates(params):
 
     assert isinstance(nodes, list)
     assert len(nodes) == clamp.call_count == len(params)
-    assert all(isinstance(node, interface.node.TokenNode) for node in nodes)
+    assert all(isinstance(node, interface.core.Token) for node in nodes)
 
     for can, node, call in zip(result.chosen_candidates, nodes, clamp.call_args_list):
         assert can.token == node.value

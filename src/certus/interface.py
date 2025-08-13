@@ -2,10 +2,11 @@
 
 from google.genai import types
 
-from . import node, utils
+from . import utils
+from .nodes import core
 
 
-def from_google(result: types.LogprobsResult) -> list[node.TokenNode]:
+def from_google(result: types.LogprobsResult) -> list[core.Token]:
     """
     Extract token nodes from a Google GenAI log-probs result.
 
@@ -16,14 +17,14 @@ def from_google(result: types.LogprobsResult) -> list[node.TokenNode]:
 
     Returns
     -------
-    list[certus.TokenNode]
+    list of certus.nodes.Token
         Token nodes.
     """
     if result.chosen_candidates is None:
         return []
 
     return [
-        node.TokenNode(can.token, utils.clamp(can.log_probability, upper=0.0))
+        core.Token(can.token, utils.clamp(can.log_probability, upper=0.0))
         for can in result.chosen_candidates
         if can.token is not None and can.log_probability is not None
     ]
