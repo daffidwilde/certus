@@ -76,7 +76,7 @@ def test_composite_node_value_one_time(composite, leaves):
     We mock the leaf gatherer so we can ensure it is only called once,
     passing a set of leaf nodes.
     """
-    with mock.patch.object(node, "_gather_leaves", return_value=leaves) as gather_leaves:
+    with mock.patch.object(node, "gather_leaves", return_value=leaves) as gather_leaves:
         v1 = composite.value
         v2 = composite.value
 
@@ -93,7 +93,7 @@ def test_composite_node_logprob_one_time(composite, leaves):
     We mock the leaf gatherer so we can ensure it is only called once,
     passing a set of leaf nodes.
     """
-    with mock.patch.object(node, "_gather_leaves", return_value=leaves) as gather_leaves:
+    with mock.patch.object(node, "gather_leaves", return_value=leaves) as gather_leaves:
         l1 = composite.logprob
         l2 = composite.logprob
 
@@ -113,7 +113,7 @@ def test_composite_node_confidence_one_time(composite, leaves):
     the probability through unchanged.
     """
     with (
-        mock.patch.object(node, "_gather_leaves", return_value=leaves) as gather_leaves,
+        mock.patch.object(node, "gather_leaves", return_value=leaves) as gather_leaves,
         mock.patch.object(node.utils, "clamp", side_effect=lambda p, _, __: p) as clamp,
     ):
         c1 = composite.confidence
@@ -134,7 +134,7 @@ def test_composite_node_leaves_one_time(composite, leaves):
     We mock the leaf gatherer so we can ensure it is only called once,
     passing a set of leaf nodes.
     """
-    with mock.patch.object(node, "_gather_leaves", return_value=leaves) as gather_leaves:
+    with mock.patch.object(node, "gather_leaves", return_value=leaves) as gather_leaves:
         l1 = composite.leaves
         l2 = composite.leaves
 
@@ -146,7 +146,7 @@ def test_composite_node_leaves_one_time(composite, leaves):
 @hyp.given(ST_COMPOSITE_NODES)
 def test_gather_leaves_composite_node(composite):
     """Check gathering from a composite returns a list of tokens."""
-    leaves = node._gather_leaves(composite)
+    leaves = node.gather_leaves(composite)
 
     def _count_leaves(node_: node.CompositeNode | node.TokenNode) -> int:
         if isinstance(node_, node.TokenNode):
@@ -162,13 +162,13 @@ def test_gather_leaves_composite_node(composite):
 @hyp.given(ST_TOKEN_NODES)
 def test_gather_leaves_solo_token_node(token):
     """Check gathering from a token node returns itself in a list."""
-    assert node._gather_leaves(token) == [token]
+    assert node.gather_leaves(token) == [token]
 
 
 @hyp.given(st.builds(node.CompositeNode, children=ST_LEAF_LISTS))
 def test_gather_leaves_composite_all_father(composite):
     """Check gathering from an all-father gives the leaves we pass."""
-    assert node._gather_leaves(composite) == composite.children
+    assert node.gather_leaves(composite) == composite.children
 
 
 def test_gather_leaves_raises_for_other_node_type():
@@ -178,4 +178,4 @@ def test_gather_leaves_raises_for_other_node_type():
         pass
 
     with pytest.raises(ValueError, match=r"Invalid node type:.*NotNode"):
-        _ = node._gather_leaves(NotNode())  # type: ignore[reportArgumentType]
+        _ = node.gather_leaves(NotNode())  # type: ignore[reportArgumentType]
