@@ -9,22 +9,13 @@ import pytest
 
 from certus.nodes import core
 
-ST_LOGPROBS = st.floats(max_value=0)
-ST_TOKEN_NODES = st.builds(core.Token, logprob=ST_LOGPROBS)
-
-ST_COMPOSITE_NODES = st.recursive(
-    ST_TOKEN_NODES,
-    lambda children: st.builds(
-        core.Composite, children=st.lists(children, min_size=1, max_size=3)
-    ),
-    max_leaves=10,
-).filter(lambda n: isinstance(n, core.Composite))
+from . import common
 
 ST_EMPTY_COMPOSITE_NODES = st.builds(core.Composite, children=st.just([]))
-ST_LEAF_LISTS = st.lists(ST_TOKEN_NODES, min_size=1)
+ST_LEAF_LISTS = st.lists(common.ST_TOKEN_NODES, min_size=1)
 
 
-@hyp.given(st.text(), ST_LOGPROBS)
+@hyp.given(st.text(), common.ST_LOGPROBS)
 def test_token_init(value, logprob):
     """Check a token is instantiated as expected."""
     token = core.Token(value, logprob)
@@ -34,7 +25,7 @@ def test_token_init(value, logprob):
     assert token._confidence is None
 
 
-@hyp.given(st.text(), ST_LOGPROBS)
+@hyp.given(st.text(), common.ST_LOGPROBS)
 def test_token_confidence_one_time(value, logprob):
     """
     Check a token calculates its confidence only once.
@@ -55,7 +46,7 @@ def test_token_confidence_one_time(value, logprob):
     clamp.assert_called_once_with(c1, 0.0, 1.0)
 
 
-@hyp.given(ST_COMPOSITE_NODES)
+@hyp.given(common.ST_COMPOSITE_NODES)
 def test_composite_node_init(composite):
     """Check a composite is instantiated as expected."""
     children = composite.children
@@ -143,7 +134,7 @@ def test_composite_node_leaves_one_time(composite, leaves):
     gather_leaves.assert_called_once_with(composite)
 
 
-@hyp.given(ST_COMPOSITE_NODES)
+@hyp.given(common.ST_COMPOSITE_NODES)
 def test_gather_leaves_composite_node(composite):
     """Check gathering from a composite returns a list of tokens."""
     leaves = core.gather_leaves(composite)
@@ -159,7 +150,7 @@ def test_gather_leaves_composite_node(composite):
     assert len(leaves) == _count_leaves(composite)
 
 
-@hyp.given(ST_TOKEN_NODES)
+@hyp.given(common.ST_TOKEN_NODES)
 def test_gather_leaves_solo_token_node(token):
     """Check gathering from a token returns itself in a list."""
     assert core.gather_leaves(token) == [token]
