@@ -1,16 +1,16 @@
-"""Module for the token node class."""
+"""Core node models."""
 
 import dataclasses
 import math
 import typing
 
-from . import utils
+from certus import utils
 
-NodeType = typing.Union["TokenNode", "CompositeNode"]
+NodeType = typing.Union["Composite", "Token"]
 
 
 @dataclasses.dataclass
-class TokenNode:
+class Token:
     """
     Data model for a token leaf node.
 
@@ -43,29 +43,37 @@ class TokenNode:
 
 
 @dataclasses.dataclass
-class CompositeNode:
+class Composite:
     """
     Data model for a node made up of other nodes.
 
     Parameters
     ----------
-    children : list of TokenNode or CompositeNode
+    children : list of Token or Composite
         Nodes contained within this composite.
 
     Attributes
     ----------
+    leaves : list of Token
+        All leaf nodes downstream from the composite.
+    value : float
+        Value of the composite. Taken as the concatenation of the
+        composite's leaf nodes' values separated by spaces.
+    logprob : float
+        Log-probability of the composite. Taken as the sum of the
+        log-probability for each leaf node of the composite.
     confidence : float
         Confidence of the composite. Derived as the geometric mean of
         the log-probabilities of all downstream token (leaf) nodes.
     """
 
-    children: list[NodeType]
+    children: list[NodeType] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
+        self._leaves: list[Token] | None = None
         self._value: str | None = None
         self._logprob: float | None = None
         self._confidence: float | None = None
-        self._leaves: list[TokenNode] | None = None
 
     @property
     def value(self) -> str:
@@ -87,13 +95,13 @@ class CompositeNode:
     def confidence(self) -> float:
         """Set or return the confidence of the composite."""
         if self._confidence is None:
-            mean_logprob = self.logprob / len(self.leaves)
+            mean_logprob = self.logprob / len(self.leaves) if self.leaves else float("-inf")
             self._confidence = utils.clamp(math.exp(mean_logprob), 0.0, 1.0)
 
         return self._confidence
 
     @property
-    def leaves(self) -> list[TokenNode]:
+    def leaves(self) -> list[Token]:
         """Return the leaf nodes downstream of this composite node."""
         if self._leaves is None:
             self._leaves = gather_leaves(self)
@@ -101,23 +109,23 @@ class CompositeNode:
         return self._leaves
 
 
-def gather_leaves(node: TokenNode | CompositeNode) -> list[TokenNode]:
+def gather_leaves(node: Token | Composite) -> list[Token]:
     """
     Get the leaf nodes downstream of a node.
 
     Parameters
     ----------
-    node : TokenNode or CompositeNode
+    node : Token or Composite
         A leaf node or one in which to delve for more.
 
     Returns
     -------
-    list of TokenNode
+    list of Token
         Leaf nodes in the composite tree.
     """
-    if isinstance(node, CompositeNode):
+    if isinstance(node, Composite):
         return [leaf for child in node.children for leaf in gather_leaves(child)]
-    if isinstance(node, TokenNode):
+    if isinstance(node, Token):
         return [node]
 
     raise ValueError(f"Invalid node type: {node}, {node.__class__}")
