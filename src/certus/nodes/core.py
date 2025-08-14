@@ -73,7 +73,7 @@ class Composite:
         the log-probabilities of all downstream token (leaf) nodes.
     """
 
-    children: list[NodeType] = dataclasses.field(default_factory=list)
+    children: typing.Sequence[NodeType] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
         self._leaves: list[Token] | None = None
