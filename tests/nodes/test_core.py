@@ -15,18 +15,19 @@ ST_EMPTY_COMPOSITE_NODES = st.builds(core.Composite, children=st.just([]))
 ST_LEAF_LISTS = st.lists(common.ST_TOKEN_NODES, min_size=1)
 
 
-@hyp.given(st.text(), common.ST_LOGPROBS)
-def test_token_init(value, logprob):
+@hyp.given(st.text(), common.ST_LOGPROBS, common.ST_STARTS)
+def test_token_init(value, logprob, start):
     """Check a token is instantiated as expected."""
-    token = core.Token(value, logprob)
+    token = core.Token(value, logprob, start)
 
     assert token.value == value
     assert token.logprob == logprob
+    assert token.start == start
     assert token._confidence is None
 
 
-@hyp.given(st.text(), common.ST_LOGPROBS)
-def test_token_confidence_one_time(value, logprob):
+@hyp.given(st.text(), common.ST_LOGPROBS, common.ST_STARTS)
+def test_token_confidence_one_time(value, logprob, start):
     """
     Check a token calculates its confidence only once.
 
@@ -37,7 +38,7 @@ def test_token_confidence_one_time(value, logprob):
     """
     with mock.patch.object(core.utils, "clamp") as clamp:
         clamp.side_effect = lambda p, _, __: p
-        token = core.Token(value, logprob)
+        token = core.Token(value, logprob, start)
         c1 = token.confidence
         c2 = token.confidence
 
@@ -55,6 +56,7 @@ def test_composite_node_init(composite):
 
     assert composite._value is None
     assert composite._logprob is None
+    assert composite._start is None
     assert composite._confidence is None
     assert composite._leaves is None
 
@@ -71,7 +73,7 @@ def test_composite_node_value_one_time(composite, leaves):
         v1 = composite.value
         v2 = composite.value
 
-    assert v1 == v2 == " ".join(leaf.value for leaf in leaves)
+    assert v1 == v2 == "".join(leaf.value for leaf in leaves)
 
     gather_leaves.assert_called_once_with(composite)
 
@@ -90,6 +92,24 @@ def test_composite_node_logprob_one_time(composite, leaves):
 
     assert l1 <= 0
     assert l1 == l2 == sum(leaf.logprob for leaf in leaves)
+
+    gather_leaves.assert_called_once_with(composite)
+
+
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, ST_LEAF_LISTS)
+def test_composite_node_start_one_time(composite, leaves):
+    """
+    Check a composite calculates its start only once.
+
+    We mock the leaf gatherer so we can ensure it is only called once,
+    passing a set of leaf nodes.
+    """
+    with mock.patch.object(core, "gather_leaves", return_value=leaves) as gather_leaves:
+        s1 = composite.start
+        s2 = composite.start
+
+    assert s1 >= 0
+    assert s1 == s2 == min(leaf.start for leaf in leaves)
 
     gather_leaves.assert_called_once_with(composite)
 

@@ -20,6 +20,8 @@ class Token:
         Value of the token in the output.
     logprob : float
         Log-probability of the token.
+    start : int
+        Position of the first token character in the response.
 
     Attributes
     ----------
@@ -29,6 +31,7 @@ class Token:
 
     value: str
     logprob: float
+    start: int
 
     def __post_init__(self):
         self._confidence: float | None = None
@@ -62,6 +65,9 @@ class Composite:
     logprob : float
         Log-probability of the composite. Taken as the sum of the
         log-probability for each leaf node of the composite.
+    start : int
+        Position of the first character in the composite. Taken as the
+        minimum of the starts for each leaf node in the composite.
     confidence : float
         Confidence of the composite. Derived as the geometric mean of
         the log-probabilities of all downstream token (leaf) nodes.
@@ -73,13 +79,14 @@ class Composite:
         self._leaves: list[Token] | None = None
         self._value: str | None = None
         self._logprob: float | None = None
+        self._start: int | None = None
         self._confidence: float | None = None
 
     @property
     def value(self) -> str:
         """Set or return the concatenation of the composite's values."""
         if self._value is None:
-            self._value = " ".join(leaf.value for leaf in self.leaves)
+            self._value = "".join(leaf.value for leaf in self.leaves)
 
         return self._value
 
@@ -90,6 +97,14 @@ class Composite:
             self._logprob = sum(leaf.logprob for leaf in self.leaves)
 
         return self._logprob
+
+    @property
+    def start(self) -> int:
+        """Set or return the earliest start in the composite."""
+        if self._start is None:
+            self._start = min(leaf.start for leaf in self.leaves)
+
+        return self._start
 
     @property
     def confidence(self) -> float:
