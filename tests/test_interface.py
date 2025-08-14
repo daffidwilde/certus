@@ -14,7 +14,7 @@ def test_from_google_no_candidates():
     assert interface.from_google(result) == []
 
 
-@hyp.given(st.lists(st.tuples(st.text(), st.floats(max_value=0))))
+@hyp.given(st.lists(st.tuples(st.text(), st.floats(max_value=0), st.integers(0))))
 def test_from_google_all_candidates(params):
     """
     Check we get a list of nodes back from a log-probability result set.
@@ -26,7 +26,8 @@ def test_from_google_all_candidates(params):
     """
     result = mock.Mock(
         chosen_candidates=[
-            mock.Mock(token=text, log_probability=logprob) for text, logprob in params
+            mock.Mock(token=text, log_probability=logprob, position=pos)
+            for text, logprob, pos in params
         ]
     )
 
@@ -38,7 +39,11 @@ def test_from_google_all_candidates(params):
     assert len(nodes) == clamp.call_count == len(params)
     assert all(isinstance(node, interface.core.Token) for node in nodes)
 
+    position = 0
     for can, node, call in zip(result.chosen_candidates, nodes, clamp.call_args_list):
         assert can.token == node.value
         assert can.log_probability == node.logprob
+        assert position == node.start
+        position += len(can.token)
+
         assert call == mock.call(node.logprob, upper=0.0)
