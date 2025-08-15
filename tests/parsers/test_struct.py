@@ -11,10 +11,13 @@ from certus.parsers import struct
 from .. import common
 
 ST_PRIMITIVES = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
+ST_JSON_DATA = st.recursive(
+    ST_PRIMITIVES, lambda children: st.lists(children) | st.dictionaries(st.text(), children)
+)
 
 
-def _check_parsed_class(element, span):
-    """Check a parsed element is the right node type for its span."""
+def _check_parsed_primitive_class(element, span):
+    """Check a parsed primitive is the right node type for its span."""
     if len(span) > 1:
         assert element == struct.nodes.Composite(children=span)
         return
@@ -54,7 +57,7 @@ def test_parse_json_primitive_dict(dict_, dict_span, data):
     assert isinstance(parsed, struct.nodes.Object)
     assert list(parsed.keys()) == list(dict_.keys())
     for element, span in zip(parsed.values(), spans):
-        _check_parsed_class(element, span)
+        _check_parsed_primitive_class(element, span)
 
     _check_find_token_span(find_token_span, dict_, dict_span, tokens, dumps_kw)
 
@@ -78,8 +81,8 @@ def test_parse_json_primitive_list(list_, list_span, data):
 
     assert isinstance(parsed, struct.nodes.Array)
     assert len(parsed) == len(list_)
-    for element, span in zip(parsed.elements, spans):
-        _check_parsed_class(element, span)
+    for element, span in zip(parsed, spans):
+        _check_parsed_primitive_class(element, span)
 
     _check_find_token_span(find_token_span, list_, list_span, tokens, dumps_kw)
 
@@ -99,7 +102,7 @@ def test_parse_json_primitive(primitive, span):
         parsed = struct.parse_json(primitive, tokens, dumps_kw)
 
     assert isinstance(parsed, (struct.nodes.Composite, struct.nodes.Token))
-    _check_parsed_class(parsed, span)
+    _check_parsed_primitive_class(parsed, span)
 
     find_token_span.assert_called_once_with(primitive, tokens, dumps_kw)
 
@@ -130,3 +133,34 @@ def test_parse_json_dumps_kw_none_becomes_empty_dict(primitive, span):
         _ = struct.parse_json(primitive, tokens, dumps_kw=None)
 
     find_token_span.assert_called_once_with(primitive, tokens, {})
+
+
+@hyp.given(
+    st.recursive(
+        ST_PRIMITIVES,
+        lambda children: st.lists(children) | st.dictionaries(st.text(), children),
+        max_leaves=50,
+    ),
+)
+def test_parse_json_recursive_node_types(json_data):
+    """Check the nodes are as expected when parsing nested JSON data."""
+    tokens, dumps_kw = mock.Mock(), mock.Mock()
+
+    def _check_node_type(parsed, data):
+        if isinstance(data, dict):
+            assert isinstance(parsed, struct.nodes.Object)
+            assert list(parsed.keys()) == list(data.keys())
+            return [
+                _check_node_type(pval, dval) for pval, dval in zip(parsed.values(), data.values())
+            ]
+
+        if isinstance(data, list):
+            assert isinstance(parsed, struct.nodes.Array)
+            return [_check_node_type(pval, dval) for pval, dval in zip(parsed, data)]
+
+        assert isinstance(parsed, struct.nodes.Composite)
+
+    with mock.patch.object(struct, "_find_token_span"):
+        parsed = struct.parse_json(json_data, tokens, dumps_kw)
+
+    _check_node_type(parsed, json_data)
