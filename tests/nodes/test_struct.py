@@ -43,6 +43,15 @@ def test_array_get_item(elements, data):
 
 
 @hyp.given(ST_ARRAY_CORE_ELEMENT_LISTS)
+def test_array_iterate(elements):
+    """Check you can iterate over the elements of an array naturally."""
+    array = struct.Array(elements=elements)
+
+    for i, element in enumerate(array):
+        assert element == elements[i]
+
+
+@hyp.given(ST_ARRAY_CORE_ELEMENT_LISTS)
 def test_array_length(elements):
     """Check the length of an array is the length of its elements."""
     assert len(struct.Array(elements=elements)) == len(elements)
