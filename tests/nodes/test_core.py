@@ -60,7 +60,7 @@ def test_composite_node_init(composite):
     assert composite._leaves is None
 
 
-@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
 def test_composite_node_value_one_time(composite, leaves):
     """
     Check a composite calculates its value only once.
@@ -77,7 +77,7 @@ def test_composite_node_value_one_time(composite, leaves):
     gather_leaves.assert_called_once_with(composite)
 
 
-@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
 def test_composite_node_logprob_one_time(composite, leaves):
     """
     Check a composite calculates its log-probability only once.
@@ -95,7 +95,7 @@ def test_composite_node_logprob_one_time(composite, leaves):
     gather_leaves.assert_called_once_with(composite)
 
 
-@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
 def test_composite_node_start_one_time(composite, leaves):
     """
     Check a composite calculates its start only once.
@@ -113,7 +113,7 @@ def test_composite_node_start_one_time(composite, leaves):
     gather_leaves.assert_called_once_with(composite)
 
 
-@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
 def test_composite_node_confidence_one_time(composite, leaves):
     """
     Check a composite calculates its confidence only once.
@@ -136,7 +136,7 @@ def test_composite_node_confidence_one_time(composite, leaves):
     clamp.assert_called_once_with(c1, 0.0, 1.0)
 
 
-@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
 def test_composite_node_leaves_one_time(composite, leaves):
     """
     Check a composite calculates its leaves only once.
@@ -169,13 +169,13 @@ def test_gather_leaves_composite_node(composite):
     assert len(leaves) == _count_leaves(composite)
 
 
-@hyp.given(common.ST_TOKENS)
+@hyp.given(common.st_tokens())
 def test_gather_leaves_solo_token_node(token):
     """Check gathering from a token returns itself in a list."""
     assert core.gather_leaves(token) == [token]
 
 
-@hyp.given(st.builds(core.Composite, children=common.ST_TOKEN_LISTS))
+@hyp.given(st.builds(core.Composite, children=common.st_token_lists()))
 def test_gather_leaves_composite_all_father(composite):
     """Check gathering from an all-father gives its children."""
     assert core.gather_leaves(composite) == composite.children

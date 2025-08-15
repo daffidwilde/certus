@@ -115,26 +115,21 @@ def _find_delimited_span(tokens: TokenSpanType, kind: type[dict | list]) -> Toke
     """
     opening, closure = DELIMITERS[kind]
 
-    start, end, depth = None, len(tokens), 0
+    start, end, depth = None, None, 0
     for i, token in enumerate(tokens):
         value = token.value
-        if value not in (opening, closure):
-            continue
-
-        if value == opening:
-            depth += 1
+        if opening in value:
+            depth += value.count(opening)
             if start is None:
                 start = i
 
-        if value == closure:
-            depth -= 1
+        if closure in value:
+            depth -= value.count(closure)
             if depth == 0:
-                end = i
+                end = i + 1
+                break
 
-        if start is not None and end is not None:
-            break
-
-    return tokens[start : end + 1]
+    return tokens[start:end]
 
 
 def _find_primitive_span(
@@ -164,7 +159,7 @@ def _find_primitive_span(
     expected = json.dumps(data, **dumps_kw)
 
     observed = "".join(t.value for t in tokens)
-    idx = observed.index(expected)
+    idx = observed.index(expected) + tokens[0].start
     start = [i for i, t in enumerate(tokens) if t.start <= idx][-1]
 
     text, end = "", start

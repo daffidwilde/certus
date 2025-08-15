@@ -10,7 +10,7 @@ from certus.nodes import Token, struct
 
 from . import common
 
-ST_CORE_NODES = common.ST_TOKENS | common.ST_COMPOSITE_NODES
+ST_CORE_NODES = common.st_tokens() | common.ST_COMPOSITE_NODES
 ST_ARRAY_CORE_ELEMENT_LISTS = st.lists(ST_CORE_NODES)
 ST_OBJECT_CORE_FIELD_DICTS = st.dictionaries(st.text(string.ascii_lowercase + "_"), ST_CORE_NODES)
 

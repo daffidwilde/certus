@@ -12,9 +12,17 @@ from certus.parsers import struct
 
 from .. import common
 
-ST_PRIMITIVES = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
+ST_PRIMITIVES = (
+    st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | common.ST_STRINGS
+)
 ST_PRIMITIVE_LISTS = st.lists(ST_PRIMITIVES)
-ST_PRIMITIVE_DICTS = st.dictionaries(st.text(string.ascii_lowercase + "_"), ST_PRIMITIVES)
+ST_KEYS = st.text(string.ascii_lowercase + "_")
+ST_PRIMITIVE_DICTS = st.dictionaries(ST_KEYS, ST_PRIMITIVES)
+ST_JSON_DATA = st.recursive(
+    ST_PRIMITIVES,
+    lambda children: st.lists(children) | st.dictionaries(ST_KEYS, children),
+    max_leaves=50,
+)
 
 
 def _check_parsed_primitive_class(element, span):
@@ -38,7 +46,7 @@ def _check_find_token_span(find_mock, root_obj, root_span, token_mock, kw_mock):
         assert call == mock.call(value, root_span, kw_mock)
 
 
-@hyp.given(ST_PRIMITIVE_DICTS, common.ST_TOKEN_LISTS, st.data())
+@hyp.given(ST_PRIMITIVE_DICTS, common.st_token_lists(), st.data())
 def test_parse_json_primitive_dict(dict_, dict_span, data):
     """
     Check the parser runs with a dictionary of primitives.
@@ -49,7 +57,7 @@ def test_parse_json_primitive_dict(dict_, dict_span, data):
     and that the span finder is called correctly.
     """
     tokens, dumps_kw = mock.Mock(), mock.Mock()
-    spans = [data.draw(common.ST_TOKEN_LISTS) for _ in dict_]
+    spans = [data.draw(common.st_token_lists()) for _ in dict_]
 
     with mock.patch.object(struct, "_find_token_span") as find_token_span:
         find_token_span.side_effect = [dict_span, *spans]
@@ -63,7 +71,7 @@ def test_parse_json_primitive_dict(dict_, dict_span, data):
     _check_find_token_span(find_token_span, dict_, dict_span, tokens, dumps_kw)
 
 
-@hyp.given(ST_PRIMITIVE_LISTS, common.ST_TOKEN_LISTS, st.data())
+@hyp.given(ST_PRIMITIVE_LISTS, common.st_token_lists(), st.data())
 def test_parse_json_primitive_list(list_, list_span, data):
     """
     Check the parser runs with a list of primitives.
@@ -74,7 +82,7 @@ def test_parse_json_primitive_list(list_, list_span, data):
     provide, and that the span finder is called correctly.
     """
     tokens, dumps_kw = mock.Mock(), mock.Mock()
-    spans = [data.draw(common.ST_TOKEN_LISTS) for _ in list_]
+    spans = [data.draw(common.st_token_lists()) for _ in list_]
 
     with mock.patch.object(struct, "_find_token_span") as find_token_span:
         find_token_span.side_effect = [list_span, *spans]
@@ -88,7 +96,7 @@ def test_parse_json_primitive_list(list_, list_span, data):
     _check_find_token_span(find_token_span, list_, list_span, tokens, dumps_kw)
 
 
-@hyp.given(ST_PRIMITIVES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_PRIMITIVES, common.st_token_lists())
 def test_parse_json_primitive(primitive, span):
     """
     Check the parser runs with a primitive.
@@ -119,7 +127,7 @@ def test_parse_json_raises_for_invalid_json():
         _ = struct.parse_json(NotJSON(), tokens, dumps_kw)  # pyright: ignore[reportArgumentType]
 
 
-@hyp.given(ST_PRIMITIVES, common.ST_TOKEN_LISTS)
+@hyp.given(ST_PRIMITIVES, common.st_token_lists())
 def test_parse_json_dumps_kw_none_becomes_empty_dict(primitive, span):
     """
     Check `dumps_kw=None` is resolved as an empty dictionary.
@@ -136,13 +144,7 @@ def test_parse_json_dumps_kw_none_becomes_empty_dict(primitive, span):
     find_token_span.assert_called_once_with(primitive, tokens, {})
 
 
-@hyp.given(
-    st.recursive(
-        ST_PRIMITIVES,
-        lambda children: st.lists(children) | st.dictionaries(st.text(), children),
-        max_leaves=50,
-    ),
-)
+@hyp.given(ST_JSON_DATA)
 def test_parse_json_recursive_node_types(json_data):
     """Check the nodes are as expected when parsing nested JSON data."""
     tokens, dumps_kw = mock.Mock(), mock.Mock()
@@ -202,9 +204,9 @@ def test_find_token_span_primitive_data(data):
 
 
 @st.composite
-def st_tokenise_string(draw: st.DrawFn, string: str) -> list[struct.nodes.Token]:
+def st_tokenise_string(draw: st.DrawFn, string: str, start: int = 0) -> list[struct.nodes.Token]:
     """Turn a string into a list of tokens."""
-    tokens, position = [], 0
+    tokens, position = [], start
     while string:
         nchars = draw(st.integers(1, len(string)))
         token = struct.nodes.Token(
@@ -218,21 +220,26 @@ def st_tokenise_string(draw: st.DrawFn, string: str) -> list[struct.nodes.Token]
 
 
 @hyp.given(
-    (ST_PRIMITIVE_DICTS | ST_PRIMITIVE_LISTS).filter(len),
-    st.just([]) | common.ST_TOKEN_LISTS,
-    st.just([]) | common.ST_TOKEN_LISTS,
+    ST_JSON_DATA.filter(lambda d: isinstance(d, (dict, list))),
+    st.just([]) | common.st_token_lists(),
+    st.just([]) | common.st_token_lists(),
     st.data(),
 )
-def test_find_delimited_span_primitive(delimited, lpad, rpad, data):
+def test_find_delimited_span(delimited, lpad, rpad, data):
     """
-    Check the delimited span finder works for primitive delimited data.
+    Check the delimited span finder works for delimited data.
 
-    In this case, we pass either a dictionary of primitives or a list of
-    primitives. We then build a token list from the data with some extra
-    bits tacked-on on either side. We should get back the token list we
-    built.
+    To test this scenario, we build a token list from the data with
+    (maybe) some extra tokens tacked-on on either side. We should get
+    back the token list we built.
     """
-    tokens = data.draw(st_tokenise_string(json.dumps(delimited)))
+    lpad_shift = 0 if not lpad else lpad[-1].start + len(lpad[-1].value)
+    tokens = data.draw(st_tokenise_string(json.dumps(delimited), start=lpad_shift))
+
+    tokens_shift = tokens[-1].start + len(tokens[-1].value)
+    for r in rpad:
+        r.start += tokens_shift
+
     span = struct._find_delimited_span([*lpad, *tokens, *rpad], type(delimited))
 
     assert isinstance(span, list)
