@@ -1,5 +1,7 @@
 """Tests for the `certus.parsers.struct` module."""
 
+import json
+import string
 from unittest import mock
 
 import hypothesis as hyp
@@ -11,9 +13,8 @@ from certus.parsers import struct
 from .. import common
 
 ST_PRIMITIVES = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
-ST_JSON_DATA = st.recursive(
-    ST_PRIMITIVES, lambda children: st.lists(children) | st.dictionaries(st.text(), children)
-)
+ST_PRIMITIVE_LISTS = st.lists(ST_PRIMITIVES)
+ST_PRIMITIVE_DICTS = st.dictionaries(st.text(string.ascii_lowercase + "_"), ST_PRIMITIVES)
 
 
 def _check_parsed_primitive_class(element, span):
@@ -37,7 +38,7 @@ def _check_find_token_span(find_mock, root_obj, root_span, token_mock, kw_mock):
         assert call == mock.call(value, root_span, kw_mock)
 
 
-@hyp.given(st.dictionaries(st.text(), ST_PRIMITIVES), common.ST_TOKEN_LISTS, st.data())
+@hyp.given(ST_PRIMITIVE_DICTS, common.ST_TOKEN_LISTS, st.data())
 def test_parse_json_primitive_dict(dict_, dict_span, data):
     """
     Check the parser runs with a dictionary of primitives.
@@ -62,7 +63,7 @@ def test_parse_json_primitive_dict(dict_, dict_span, data):
     _check_find_token_span(find_token_span, dict_, dict_span, tokens, dumps_kw)
 
 
-@hyp.given(st.lists(ST_PRIMITIVES), common.ST_TOKEN_LISTS, st.data())
+@hyp.given(ST_PRIMITIVE_LISTS, common.ST_TOKEN_LISTS, st.data())
 def test_parse_json_primitive_list(list_, list_span, data):
     """
     Check the parser runs with a list of primitives.
@@ -164,3 +165,76 @@ def test_parse_json_recursive_node_types(json_data):
         parsed = struct.parse_json(json_data, tokens, dumps_kw)
 
     _check_node_type(parsed, json_data)
+
+
+@hyp.given(ST_PRIMITIVE_DICTS | ST_PRIMITIVE_LISTS)
+def test_find_token_span_delimited_data(data):
+    """Check the token span finder routes delimited data correctly."""
+    tokens, dumps_kw = mock.Mock(), mock.Mock()
+
+    with (
+        mock.patch.object(struct, "_find_delimited_span") as find_delimited_span,
+        mock.patch.object(struct, "_find_primitive_span") as find_primitive_span,
+    ):
+        span = struct._find_token_span(data, tokens, dumps_kw)
+
+    assert span is find_delimited_span.return_value
+
+    find_delimited_span.assert_called_once_with(tokens, type(data))
+    find_primitive_span.assert_not_called()
+
+
+@hyp.given(ST_PRIMITIVES)
+def test_find_token_span_primitive_data(data):
+    """Check the token span finder routes primitive data correctly."""
+    tokens, dumps_kw = mock.Mock(), mock.Mock()
+
+    with (
+        mock.patch.object(struct, "_find_delimited_span") as find_delimited_span,
+        mock.patch.object(struct, "_find_primitive_span") as find_primitive_span,
+    ):
+        span = struct._find_token_span(data, tokens, dumps_kw)
+
+    assert span is find_primitive_span.return_value
+
+    find_primitive_span.assert_called_once_with(tokens, data, dumps_kw)
+    find_delimited_span.assert_not_called()
+
+
+@st.composite
+def st_tokenise_string(draw: st.DrawFn, string: str) -> list[struct.nodes.Token]:
+    """Turn a string into a list of tokens."""
+    tokens, position = [], 0
+    while string:
+        nchars = draw(st.integers(1, len(string)))
+        token = struct.nodes.Token(
+            value=string[:nchars], logprob=draw(common.ST_LOGPROBS), start=position
+        )
+        tokens.append(token)
+        string = string[nchars:]
+        position += nchars
+
+    return tokens
+
+
+@hyp.given(
+    (ST_PRIMITIVE_DICTS | ST_PRIMITIVE_LISTS).filter(len),
+    st.just([]) | common.ST_TOKEN_LISTS,
+    st.just([]) | common.ST_TOKEN_LISTS,
+    st.data(),
+)
+def test_find_delimited_span_primitive(delimited, lpad, rpad, data):
+    """
+    Check the delimited span finder works for primitive delimited data.
+
+    In this case, we pass either a dictionary of primitives or a list of
+    primitives. We then build a token list from the data with some extra
+    bits tacked-on on either side. We should get back the token list we
+    built.
+    """
+    tokens = data.draw(st_tokenise_string(json.dumps(delimited)))
+    span = struct._find_delimited_span([*lpad, *tokens, *rpad], type(delimited))
+
+    assert isinstance(span, list)
+    assert all(isinstance(tok, struct.nodes.Token) for tok in span)
+    assert span == tokens
