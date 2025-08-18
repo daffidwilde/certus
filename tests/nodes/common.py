@@ -12,4 +12,4 @@ ST_COMPOSITE_NODES = st.recursive(
     max_leaves=10,
 ).filter(lambda n: isinstance(n, Composite))
 
-__all__ = ["ST_LOGPROBS", "ST_STARTS", "st_tokens()", "st_token_lists()"]
+__all__ = ["ST_LOGPROBS", "ST_STARTS", "st_tokens", "st_token_lists"]
