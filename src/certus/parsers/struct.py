@@ -1,7 +1,9 @@
 """Module for the JSON (structured output) parser."""
 
 import json
+import re
 import typing
+import warnings
 
 from certus import nodes
 
@@ -67,10 +69,15 @@ def _find_token_span(
     data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType
 ) -> TokenSpanType:
     """
-    Find the token span of some JSON data given its type.
+    Find the token span of some JSON data.
 
     A span is the contiguous sequence of tokens required to build the
     JSON string of the provided data.
+
+    We identify the span of a data packet by looking for its position in
+    the provided token list up to some amount of whitespace in the
+    scaffolding. Then the span consumes tokens until the packet is fully
+    contained.
 
     Parameters
     ----------
@@ -86,88 +93,84 @@ def _find_token_span(
     list of Token
         Token span of the data.
     """
-    if isinstance(data, (dict, list)):
-        return _find_delimited_span(tokens, type(data))
+    pattern = _make_regex_from_json(data, dumps_kw)
+    observed = "".join(t.value for t in tokens)
 
-    return _find_primitive_span(tokens, data, dumps_kw)
+    search = re.search(pattern, observed, re.DOTALL)
+    if search is None:
+        warnings.warn(f"Unable to find span for {data=}", RuntimeWarning)
+        return []
 
-
-def _find_delimited_span(tokens: TokenSpanType, kind: type[dict | list]) -> TokenSpanType:
-    """
-    Find the token span of some delimited JSON, i.e. arrays and objects.
-
-    We identify the span of a delimited data packet using delimiters. We
-    start by looking for the token containing the opening delimiter and
-    then going until we find the token containing the closing delimiter
-    at the same level.
-
-    Parameters
-    ----------
-    tokens : list of Token
-        Tokens from which to get the span.
-    kind : type of dict or list
-        Kind of delimited JSON data for which to look.
-
-    Returns
-    -------
-    list of Token
-        Token span of the data.
-    """
-    opening, closure = DELIMITERS[kind]
-
-    start, end, depth = None, None, 0
-    for i, token in enumerate(tokens):
-        value = token.value
-        if opening in value:
-            depth += value.count(opening)
-            if start is None:
-                start = i
-
-        if closure in value:
-            depth -= value.count(closure)
-            if depth == 0:
-                end = i + 1
-                break
+    start, end = _find_span_limits(tokens, search, pattern)
 
     return tokens[start:end]
 
 
-def _find_primitive_span(
-    tokens: TokenSpanType, data: JSONPrimitiveType, dumps_kw: KwargsType
-) -> TokenSpanType:
+def _make_regex_from_json(data: JSONDataType, dumps_kw: KwargsType) -> str:
     """
-    Find the token span of a JSON primitive.
+    Create a regular expression from a piece of JSON data.
 
-    We identify the span of the primitive by looking for its position in
-    the provided token list. Then the span consumes tokens until the
-    primitive is fully contained.
+    The resultant pattern allows for flexible (or non-existent)
+    whitespace outside string literals. We do this by enforcing
+    indentation when dumping the data to a string and then iterating
+    over the segments inside and outside double-quotes.
 
     Parameters
     ----------
-    tokens : list of Token
-        Tokens from which to get the span.
-    data : None or bool or int or float or str
-        Primitive for which to look.
+    data : JSON-like
+        Data to transform.
     dumps_kw : dict
         Keyword arguments to pass to `json.dumps()` when dumping `data`.
 
     Returns
     -------
-    list of Token
-        Token span of the data.
+    re.Pattern
+        Regular expression of `data` with flexible whitespace.
     """
-    expected = json.dumps(data, **dumps_kw)
+    dumps_kw = dumps_kw.copy()
+    indent = dumps_kw.pop("indent", 1)
+    dumped = json.dumps(data, indent=indent, **dumps_kw)
 
-    observed = "".join(t.value for t in tokens)
-    idx = observed.index(expected) + tokens[0].start
-    start = [i for i, t in enumerate(tokens) if t.start <= idx][-1]
+    segments = re.split(r'("(?:[^"\\]|\\.)*")', dumped)
+
+    parts = []
+    for i, segment in enumerate(segments):
+        escaped = re.escape(segment)
+        if i % 2 == 0:
+            parts.append(re.sub(r"\s+", r"\\s*", escaped))
+        else:
+            parts.append(escaped)
+
+    return re.sub(r"(\\\\s\*)+", r"\\s*", "".join(parts))
+
+
+def _find_span_limits(tokens: TokenSpanType, search: re.Match, pattern: str) -> tuple[int, int]:
+    """
+    Find the start and end of a token span.
+
+    Parameters
+    ----------
+    tokens : list of Token
+        Tokens through which to search.
+    pattern : str
+        Regular expression to look for when finding the span.
+    search : re.Match
+        Result of a search for `pattern` in the concatenated token
+        string.
+
+    Returns
+    -------
+    (int, int)
+        Start and end (exclusive) indices for the token span.
+    """
+    start = max(i for i, t in enumerate(tokens) if t.start <= search.start() + tokens[0].start)
 
     text, end = "", start
     for token in tokens[start:]:
-        end += 1
-        if expected in text:
-            break
+        if re.search(pattern, text, re.DOTALL):
+            return start, end
 
+        end += 1
         text += token.value
 
-    return tokens[start:end]
+    return start, end
