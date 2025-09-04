@@ -14,21 +14,25 @@ ST_STARTS = st.integers(0, 100)
 
 
 @st.composite
-def st_tokens(draw: st.DrawFn) -> Token:
+def st_tokens(
+    draw: st.DrawFn,
+    value_strategy: st.SearchStrategy = ST_STRINGS,
+    logprob_strategy: st.SearchStrategy = ST_LOGPROBS,
+    start_strategy: st.SearchStrategy = ST_STARTS,
+) -> Token:
     """Create a token for a test."""
-    value = draw(ST_STRINGS)
-
-    return Token(value, draw(ST_LOGPROBS), len(value))
+    return draw(
+        st.builds(Token, value=value_strategy, logprob=logprob_strategy, start=start_strategy)
+    )
 
 
 @st.composite
 def st_token_lists(draw: st.DrawFn, min_size: int = 1, max_size: int = 5) -> list[Token]:
     """Create a list of tokens for a test."""
     num = draw(st.integers(min_size, max_size))
-    tokens, position = [], 0
+    tokens, position = [], draw(ST_STARTS)
     for _ in range(num):
-        token = draw(st_tokens())
-        token.start += position
+        token = draw(st_tokens(start_strategy=st.just(position)))
         position += len(token.value)
         tokens.append(token)
 
