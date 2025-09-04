@@ -98,6 +98,28 @@ def _check_find_token_span(data, tokens, spans, find_mock, kw_mock):
         start = span[1]
 
 
+@hyp.given(ST_JSON_DATA, common.st_token_lists())
+def test_parse_json_main(data, tokens):
+    """Check the core JSON parser runs as it should."""
+    dumps_kw, node = mock.Mock(), mock.Mock()
+    with mock.patch.object(struct, "_parse_json", return_value=(node, mock.Mock())) as parse_json:
+        parsed = struct.parse_json(data, tokens, dumps_kw)
+
+    assert parsed is node
+    parse_json.assert_called_once_with(data, tokens, dumps_kw)
+
+
+@hyp.given(ST_JSON_DATA, common.st_token_lists())
+def test_parse_json_main_dumps_kw_none_becomes_empty_dict(data, tokens):
+    """Check `dumps_kw=None` is resolved as an empty dictionary."""
+    with mock.patch.object(
+        struct, "_parse_json", return_value=(mock.Mock(), mock.Mock())
+    ) as parse_json:
+        _ = struct.parse_json(data, tokens, dumps_kw=None)
+
+    parse_json.assert_called_once_with(data, tokens, {})
+
+
 @hyp.given(st_data_span_params(ST_PRIMITIVE_DICTS))
 def test_parse_json_primitive_dict(params):
     """
@@ -112,7 +134,7 @@ def test_parse_json_primitive_dict(params):
     dumps_kw = mock.Mock()
 
     with mock.patch.object(struct, "_find_token_span", side_effect=spans) as find_token_span:
-        parsed, end = struct.parse_json(data, tokens, dumps_kw)
+        parsed, end = struct._parse_json(data, tokens, dumps_kw)
 
     assert end == spans[0][1]
 
@@ -138,7 +160,7 @@ def test_parse_json_primitive_list(params):
     dumps_kw = mock.Mock()
 
     with mock.patch.object(struct, "_find_token_span", side_effect=spans) as find_token_span:
-        parsed, end = struct.parse_json(data, tokens, dumps_kw)
+        parsed, end = struct._parse_json(data, tokens, dumps_kw)
 
     assert end == spans[0][1]
 
@@ -166,7 +188,7 @@ def test_parse_json_primitive(params):
     span = spans[0]
 
     with mock.patch.object(struct, "_find_token_span", return_value=span) as find_token_span:
-        parsed, end = struct.parse_json(data, tokens, dumps_kw)
+        parsed, end = struct._parse_json(data, tokens, dumps_kw)
 
     assert end == span[1]
 
@@ -187,26 +209,9 @@ def test_parse_json_raises_for_invalid_json():
         mock.patch.object(struct, "_find_token_span") as find_token_span,
         pytest.raises(ValueError, match=r"Invalid JSON data:.*NotJSON"),
     ):
-        _ = struct.parse_json(NotJSON(), tokens, dumps_kw)  # pyright: ignore[reportArgumentType]
+        _ = struct._parse_json(NotJSON(), tokens, dumps_kw)  # pyright: ignore[reportArgumentType]
 
     find_token_span.assert_not_called()
-
-
-@hyp.given(st_data_span_params(ST_PRIMITIVES))
-def test_parse_json_dumps_kw_none_becomes_empty_dict(params):
-    """
-    Check `dumps_kw=None` is resolved as an empty dictionary.
-
-    To make things straightforward, we only check this for primitive
-    inputs. We verify this behaviour by checking how the (mocked) token
-    span finder is called.
-    """
-    data, tokens, spans = params
-
-    with mock.patch.object(struct, "_find_token_span", return_value=spans[0]) as find_token_span:
-        _ = struct.parse_json(data, tokens, dumps_kw=None)
-
-    find_token_span.assert_called_once_with(data, tokens, {}, 0)
 
 
 @hyp.given(ST_JSON_DATA, common.st_token_lists(), ST_PRIMITIVE_DICTS, st.data())
