@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables
+.env
+
+# Test files
+.coverage
+.hypothesis
+
+# Scratchwork
+scrap/

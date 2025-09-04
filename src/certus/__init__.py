@@ -1,6 +1,7 @@
 """Confidence parsing of LLM outputs."""
 
-__version__ = "0.0.1"
+from . import interface, nodes, parsers
 
-__all__ = ["__version__"]
+__version__ = "0.0.2"
 
+__all__ = ["__version__", "interface", "nodes", "parsers"]
