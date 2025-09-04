@@ -16,10 +16,10 @@ TokenSpanType: typing.TypeAlias = typing.Sequence[nodes.Token]
 
 
 def parse_json(
-    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType | None = None, _offset: int = 0
-) -> tuple[JSONNodeType, int]:
+    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType | None = None
+) -> JSONNodeType:
     """
-    Parse JSON into a node tree, tracking position by absolute offset.
+    Parse JSON recursively into a node tree.
 
     Parameters
     ----------
@@ -33,6 +33,8 @@ def parse_json(
 
     Raises
     ------
+    ValueError
+        If `data` is not valid JSON.
     RuntimeError
         If a span or element of a span cannot be found, which really
         should not happen. Ensure that `tokens` and `dumps_kw` are
@@ -42,20 +44,45 @@ def parse_json(
     -------
     JSONNodeType
         Parsed token node.
+    """
+    dumps_kw = dumps_kw or {}
+    node, _ = _parse_json(data, tokens, dumps_kw)
+
+    return node
+
+
+def _parse_json(
+    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType, offset: int = 0
+) -> tuple[JSONNodeType, int]:
+    """
+    Parse JSON into a node tree, tracking position by absolute offset.
+
+    Parameters
+    ----------
+    data : JSON-like
+        Data to parse.
+    tokens : sequence of Token
+        Token nodes.
+    dumps_kw : dict
+        Keyword arguments for `json.dumps()`.
+
+    Returns
+    -------
+    JSONNodeType
+        Parsed token node.
     int
         Index of first unused token after this subtree.
     """
-    if data is not None and not isinstance(data, (str, int, float, list, dict)):
+    if data is not None and not isinstance(data, (str, bool, int, float, list, dict)):
         raise ValueError(f"Invalid JSON data: {data=}, {type(data)=}")
 
-    dumps_kw = dumps_kw or {}
-    start, end = _find_token_span(data, tokens, dumps_kw, _offset)
+    start, end = _find_token_span(data, tokens, dumps_kw, offset)
     token_span = tokens[start:end]
 
     if isinstance(data, dict):
         fields = {}
         for key, value in data.items():
-            node, start = parse_json(value, tokens, dumps_kw, start)
+            node, start = _parse_json(value, tokens, dumps_kw, start)
             fields[key] = node
 
         return nodes.Object(fields=fields), end
@@ -63,7 +90,7 @@ def parse_json(
     if isinstance(data, list):
         elements = []
         for item in data:
-            node, start = parse_json(item, tokens, dumps_kw, start)
+            node, start = _parse_json(item, tokens, dumps_kw, start)
             elements.append(node)
 
         return nodes.Array(elements=elements), end
