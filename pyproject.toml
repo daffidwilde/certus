@@ -2,6 +2,7 @@
 name = "certus"
 description = "Confidence parsing of LLM outputs"
 readme = "README.md"
+license = { file = "LICENCE" }
 authors = [
     { name = "Henry Wilde", email = "henrydavidwilde@gmail.com" }
 ]
