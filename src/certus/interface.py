@@ -23,8 +23,14 @@ def from_google(result: types.LogprobsResult) -> list[core.Token]:
     if result.chosen_candidates is None:
         return []
 
-    return [
-        core.Token(can.token, utils.clamp(can.log_probability, upper=0.0))
-        for can in result.chosen_candidates
-        if can.token is not None and can.log_probability is not None
-    ]
+    tokens, position = [], 0
+    for candidate in result.chosen_candidates:
+        value = candidate.token
+        logprob = candidate.log_probability
+        if value is None or logprob is None:
+            continue
+
+        tokens.append(core.Token(value, utils.clamp(logprob, upper=0.0), position))
+        position += len(value)
+
+    return tokens

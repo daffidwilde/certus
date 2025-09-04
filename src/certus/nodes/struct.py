@@ -26,6 +26,9 @@ class Array(Composite):
     def __getitem__(self, index: int) -> NodeType:
         return self.elements[index]
 
+    def __iter__(self) -> typing.Iterator[NodeType]:
+        return iter(self.elements)
+
     def __len__(self) -> int:
         return len(self.elements)
 

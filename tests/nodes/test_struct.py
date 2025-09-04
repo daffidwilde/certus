@@ -6,18 +6,18 @@ import string
 import hypothesis as hyp
 import hypothesis.strategies as st
 
-from certus.nodes import struct
+from certus.nodes import Token, struct
 
 from . import common
 
-ST_CORE_NODES = common.ST_TOKEN_NODES | common.ST_COMPOSITE_NODES
+ST_CORE_NODES = common.st_tokens() | common.ST_COMPOSITE_NODES
 ST_ARRAY_CORE_ELEMENT_LISTS = st.lists(ST_CORE_NODES)
 ST_OBJECT_CORE_FIELD_DICTS = st.dictionaries(st.text(string.ascii_lowercase + "_"), ST_CORE_NODES)
 
 
 def get_num_composites(node):
     """Get the number of explicit composite nodes in a structure."""
-    if isinstance(node, common.Token):
+    if isinstance(node, Token):
         return 0
 
     child_num = sum(get_num_composites(child) for child in node.children)
@@ -40,6 +40,15 @@ def test_array_get_item(elements, data):
     array = struct.Array(elements=elements)
 
     assert array[idx] == elements[idx]
+
+
+@hyp.given(ST_ARRAY_CORE_ELEMENT_LISTS)
+def test_array_iterate(elements):
+    """Check you can iterate over the elements of an array naturally."""
+    array = struct.Array(elements=elements)
+
+    for i, element in enumerate(array):
+        assert element == elements[i]
 
 
 @hyp.given(ST_ARRAY_CORE_ELEMENT_LISTS)
