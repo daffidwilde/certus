@@ -3,11 +3,8 @@
 import json
 import re
 import typing
-import warnings
 
 from certus import nodes
-
-DELIMITERS = {dict: ("{", "}"), list: ("[", "]")}
 
 JSONNodeType: typing.TypeAlias = nodes.Object | nodes.Array | nodes.Composite | nodes.Token
 JSONPrimitiveType: typing.TypeAlias = None | bool | int | float | str
@@ -19,91 +16,97 @@ TokenSpanType: typing.TypeAlias = typing.Sequence[nodes.Token]
 
 
 def parse_json(
-    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType | None = None
-) -> JSONNodeType:
+    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType | None = None, _offset: int = 0
+) -> tuple[JSONNodeType, int]:
     """
-    Parse some JSON data into nodes recursively into a tree.
-
-    Parsing JSON works by identifying the span of tokens that contribute
-    to each component of the data and then casting them:
-
-    - Primitive components are cast to token nodes or composite nodes
-    - Arrays (lists) are cast to array nodes
-    - Objects (dictionaries) are cast to object nodes
+    Parse JSON into a node tree, tracking position by absolute offset.
 
     Parameters
     ----------
     data : JSON-like
         Data to parse.
-    tokens : list of Token
-        Token nodes from which to build the tree.
+    tokens : sequence of Token
+        Token nodes.
     dumps_kw : dict, optional
-        Keyword arguments to pass to `json.dumps()` during parsing. Used
-        when parsing primitive components.
+        Keyword arguments for `json.dumps()`. If not provided, defaults
+        to an empty dictionary.
+
+    Raises
+    ------
+    RuntimeError
+        If a span or element of a span cannot be found, which really
+        should not happen. Ensure that `tokens` and `dumps_kw` are
+        correct for your `data`.
 
     Returns
     -------
-    JSON node
-        Parsed token tree.
+    JSONNodeType
+        Parsed token node.
+    int
+        Index of first unused token after this subtree.
     """
     if data is not None and not isinstance(data, (str, int, float, list, dict)):
         raise ValueError(f"Invalid JSON data: {data=}, {type(data)=}")
 
     dumps_kw = dumps_kw or {}
-    token_span = _find_token_span(data, tokens, dumps_kw)
+    start, end = _find_token_span(data, tokens, dumps_kw, _offset)
+    token_span = tokens[start:end]
 
     if isinstance(data, dict):
-        fields = {k: parse_json(v, token_span, dumps_kw) for k, v in data.items()}
-        return nodes.Object(fields=fields)
+        fields = {}
+        for key, value in data.items():
+            node, start = parse_json(value, tokens, dumps_kw, start)
+            fields[key] = node
+
+        return nodes.Object(fields=fields), end
+
     if isinstance(data, list):
-        elements = [parse_json(e, token_span, dumps_kw) for e in data]
-        return nodes.Array(elements=elements)
+        elements = []
+        for item in data:
+            node, start = parse_json(item, tokens, dumps_kw, start)
+            elements.append(node)
+
+        return nodes.Array(elements=elements), end
 
     if len(token_span) == 1:
-        return token_span[0]
+        return token_span[0], end
 
-    return nodes.Composite(children=token_span)
+    return nodes.Composite(children=token_span), end
 
 
 def _find_token_span(
-    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType
-) -> TokenSpanType:
+    data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType, offset: int
+) -> tuple[int, int]:
     """
-    Find the token span of some JSON data.
-
-    A span is the contiguous sequence of tokens required to build the
-    JSON string of the provided data.
-
-    We identify the span of a data packet by looking for its position in
-    the provided token list up to some amount of whitespace in the
-    scaffolding. Then the span consumes tokens until the packet is fully
-    contained.
+    Find absolute indices for the token span of some data.
 
     Parameters
     ----------
     data : JSON-like
-        Data for which to find the span.
-    tokens : list of Token
-        Tokens from which to get the span.
-    dumps_kw : dict
-        Keyword arguments to pass to `json.dumps()`.
+        Data to parse.
+    tokens : sequence of Token
+        Token nodes.
+    dumps_kw : dict, optional
+        Keyword arguments for `json.dumps()`.
+    offset : int
+        Index in `tokens` from which to start parsing.
 
     Returns
     -------
-    list of Token
-        Token span of the data.
+    tuple of (int, int)
+        Start and end indices of the span.
     """
     pattern = _make_regex_from_json(data, dumps_kw)
-    observed = "".join(t.value for t in tokens)
+    observed = "".join(t.value for t in tokens[offset:])
 
     search = re.search(pattern, observed, re.DOTALL)
     if search is None:
-        warnings.warn(f"Unable to find span for {data=}", RuntimeWarning)
-        return []
+        raise RuntimeError(f"Unable to find span for {data=}")
 
-    start, end = _find_span_limits(tokens, search, pattern)
+    start = _find_span_start(tokens, search, offset)
+    end = _find_span_end(tokens, pattern, start)
 
-    return tokens[start:end]
+    return start, end
 
 
 def _make_regex_from_json(data: JSONDataType, dumps_kw: KwargsType) -> str:
@@ -144,33 +147,57 @@ def _make_regex_from_json(data: JSONDataType, dumps_kw: KwargsType) -> str:
     return re.sub(r"(\\\\s\*)+", r"\\s*", "".join(parts))
 
 
-def _find_span_limits(tokens: TokenSpanType, search: re.Match, pattern: str) -> tuple[int, int]:
+def _find_span_start(tokens: TokenSpanType, search: re.Match, offset: int) -> int:
     """
-    Find the start and end of a token span.
+    Find the absolute start index of a span from a regex search.
 
     Parameters
     ----------
-    tokens : list of Token
-        Tokens through which to search.
-    pattern : str
-        Regular expression to look for when finding the span.
+    tokens : sequence of Token
+        The full token list.
     search : re.Match
-        Result of a search for `pattern` in the concatenated token
-        string.
+        Match object from a regex search over the concatenated tokens.
+        Used to find the local start.
+    offset : int
+        Index of the token where the matchable substring begins.
 
     Returns
     -------
-    (int, int)
-        Start and end (exclusive) indices for the token span.
+    int
+        Absolute start index of the token span.
     """
-    start = max(i for i, t in enumerate(tokens) if t.start <= search.start() + tokens[0].start)
+    char_count = 0
+    char_start = search.start()
+    for idx, token in enumerate(tokens[offset:], start=offset):
+        char_count += len(token.value)
+        if char_count > char_start:
+            return idx
 
-    text, end = "", start
-    for token in tokens[start:]:
-        if re.search(pattern, text, re.DOTALL):
-            return start, end
+    raise RuntimeError(f"Unable to find start index for {search=}")
 
-        end += 1
+
+def _find_span_end(tokens: TokenSpanType, pattern: str, start: int) -> int:
+    """
+    Find the absolute end index of a span from a pattern.
+
+    Parameters
+    ----------
+    tokens : sequence of Token
+        The full token list.
+    pattern : str
+        The regex pattern.
+    start : int
+        Absolute start index of the span.
+
+    Returns
+    -------
+    int
+        Absolute end index (exclusive) in `tokens`.
+    """
+    text = ""
+    for idx, token in enumerate(tokens[start:], start=start):
         text += token.value
+        if re.search(pattern, text, re.DOTALL):
+            return idx + 1
 
-    return start, end
+    raise RuntimeError(f"Unable to find end index for {pattern=}")
