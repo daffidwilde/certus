@@ -123,34 +123,34 @@ Now, we can parse this dictionary response and token nodes into a single `Object
 >>> parsed = ct.parsers.parse_json(data, tokens)
 >>> parsed  # doctest:+SKIP
 Object(
-    fields={
-        'name': Composite(children=[Token(value=' "', logprob=-3e-05, start=8), Token(value='Henry', logprob=-7.2e-05, start=10), Token(value=' Wilde', logprob=-5.2e-05, start=15), Token(value='",', logprob=-0.000153, start=21)]), 
-        'age': Token(value='29', logprob=-7e-05, start=31),
-        'longest_walk_km': Composite(children=[Token(value='160', logprob=-0.000131, start=54), Token(value='.', logprob=-0.000229, start=57), Token(value='9', logprob=-0.000115, start=58)]),
-        'pets': Array(
-            elements=[
+  fields={
+    'name': Composite(value=' "Henry Wilde",', logprob=-0.000307, start=8),
+    'age': Token(value='29', logprob=-7e-05, start=31),
+    'longest_walk_km': Composite(value='165.2', logprob=-0.00047500000000000005, start=54),
+    'pets': Array(
+      elements=[
+        Object(
+          fields={
+            'name': Composite(value=' "Billie",', logprob=-0.000473, start=78),
+            'species': Composite(value=' "cat",', logprob=-0.000284, start=99),
+            'favourite_foods': Array(
+              elements=[
+                Composite(value=' ["fish",', logprob=-0.000454, start=125),
+                Composite(value=' "oat milk",', logprob=-0.00034, start=134),
                 Object(
-                    fields={
-                        'name': Composite(children=[Token(value=' "', logprob=-0.0002, start=78), Token(value='Bill', logprob=-3e-05, start=80), Token(value='ie', logprob=-0.000163, start=84), Token(value='",', logprob=-8e-05, start=86)]),
-                        'species': Composite(children=[Token(value=' "', logprob=-0.000174, start=99), Token(value='cat', logprob=-0.00011, start=101), Token(value='",', logprob=-0.0, start=104)]),
-                        'favourite_foods': Array(
-                            elements=[
-                                Composite(children=[Token(value=' ["', logprob=-8.4e-05, start=125), Token(value='fish', logprob=-2.7e-05, start=128), Token(value='",', logprob=-0.000343, start=132)]),
-                                Composite(children=[Token(value=' "', logprob=-0.000163, start=134), Token(value='o', logprob=-5.9e-05, start=136), Token(value='at', logprob=-8e-06, start=137), Token(value=' milk', logprob=-3.9e-05, start=139), Token(value='",', logprob=-7.1e-05, start=144)]), 
-                                Object(
-                                    fields={
-                                        'name': Composite(children=[Token(value=' "', logprob=-0.000123, start=155), Token(value='ch', logprob=-7.9e-05, start=157), Token(value='icken', logprob=-0.000168, start=159), Token(value='",', logprob=-7.8e-05, start=164)]),
-                                        'preparation': Composite(children=[Token(value=' "', logprob=-9.1e-05, start=181), Token(value='bo', logprob=-4.9e-05, start=183), Token(value='iled', logprob=-8.6e-05, start=185), Token(value='",', logprob=-3.4e-05, start=189)]),
-                                        'when_sick': Token(value=' true', logprob=-9e-06, start=204)
-                                    }
-                                )
-                            ]
-                        )
-                    }    
+                  fields={
+                    'name': Composite(value=' "chicken",', logprob=-0.000448, start=155),
+                    'preparation': Composite(value=' "boiled",', logprob=-0.00026000000000000003, start=181),
+                    'when_sick': Token(value=' true', logprob=-9e-06, start=204)
+                  }
                 )
-            ]
+              ]
+            )
+          }
         )
-    }
+      ]
+    )
+  }
 )
 
 ```
