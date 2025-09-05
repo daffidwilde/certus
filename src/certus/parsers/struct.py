@@ -95,10 +95,10 @@ def _parse_json(
 
         return nodes.Array(elements=elements), end
 
-    if len(token_span) == 1:
-        return token_span[0], end
+    node = token_span[0] if len(token_span) == 1 else nodes.Composite(token_span)
+    kind = None if data is None else type(data)
 
-    return nodes.Composite(children=token_span), end
+    return nodes.Primitive(node, kind=kind), end
 
 
 def _find_token_span(

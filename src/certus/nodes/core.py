@@ -59,9 +59,9 @@ class Composite:
     ----------
     leaves : list of Token
         All leaf nodes downstream from the composite.
-    value : float
+    value : str
         Value of the composite. Taken as the concatenation of the
-        composite's leaf nodes' values separated by spaces.
+        composite's leaf nodes' values.
     logprob : float
         Log-probability of the composite. Taken as the sum of the
         log-probability for each leaf node of the composite.
@@ -83,9 +83,7 @@ class Composite:
         self._confidence: float | None = None
 
     def __repr__(self) -> str:
-        value, logprob, start = self.value, self.logprob, self.start
-
-        return f"{self.__class__.__name__}({value=}, {logprob=}, {start=})"
+        return _make_repr(self)
 
     @property
     def value(self) -> str:
@@ -129,7 +127,7 @@ class Composite:
         return self._leaves
 
 
-def gather_leaves(node: Token | Composite) -> list[Token]:
+def gather_leaves(node: NodeType) -> list[Token]:
     """
     Get the leaf nodes downstream of a node.
 
@@ -143,9 +141,18 @@ def gather_leaves(node: Token | Composite) -> list[Token]:
     list of Token
         Leaf nodes in the composite tree.
     """
-    if isinstance(node, Composite):
+    try:
         return [leaf for child in node.children for leaf in gather_leaves(child)]
-    if isinstance(node, Token):
+
+    except AttributeError:
         return [node]
 
-    raise ValueError(f"Invalid node type: {node}, {node.__class__}")
+    except:
+        raise ValueError(f"Invalid node type: {node}, {node.__class__}")
+
+
+def _make_repr(node: NodeType) -> str:
+    """Make a string representation of a node."""
+    value, logprob, start = node.value, node.logprob, node.start
+
+    return f"{node.__class__.__name__}({value=}, {logprob=}, {start=})"
