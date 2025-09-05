@@ -1,6 +1,7 @@
 """Tests for the `certus.nodes.core` module."""
 
 import math
+import re
 from unittest import mock
 
 import hypothesis as hyp
@@ -58,6 +59,19 @@ def test_composite_node_init(composite):
     assert composite._start is None
     assert composite._confidence is None
     assert composite._leaves is None
+
+
+@hyp.given(common.ST_COMPOSITE_NODES, common.st_token_lists())
+def test_composite_node_repr(composite, leaves):
+    """Check a composite has a sensible string representation."""
+    with mock.patch.object(core, "gather_leaves", return_value=leaves) as gather_leaves:
+        repr_ = repr(composite)
+
+    assert isinstance(repr_, str)
+    assert re.match(r"Composite\(value=.*, logprob=.*, start=.*\)", repr_)
+    assert all(repr(getattr(composite, attr)) in repr_ for attr in ("value", "logprob", "start"))
+
+    gather_leaves.assert_called_once_with(composite)
 
 
 @hyp.given(ST_EMPTY_COMPOSITE_NODES, common.st_token_lists())
