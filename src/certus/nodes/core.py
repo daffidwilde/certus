@@ -33,7 +33,7 @@ class Token:
     logprob: float
     start: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._confidence: float | None = None
 
     @property
@@ -75,12 +75,17 @@ class Composite:
 
     children: typing.Sequence[NodeType] = dataclasses.field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._leaves: list[Token] | None = None
         self._value: str | None = None
         self._logprob: float | None = None
         self._start: int | None = None
         self._confidence: float | None = None
+
+    def __repr__(self) -> str:
+        value, logprob, start = self.value, self.logprob, self.start
+
+        return f"{self.__class__.__name__}({value=}, {logprob=}, {start=})"
 
     @property
     def value(self) -> str:

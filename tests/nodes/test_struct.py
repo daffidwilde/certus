@@ -6,25 +6,13 @@ import string
 import hypothesis as hyp
 import hypothesis.strategies as st
 
-from certus.nodes import Token, struct
+from certus.nodes import struct
 
 from . import common
 
 ST_CORE_NODES = common.st_tokens() | common.ST_COMPOSITE_NODES
 ST_ARRAY_CORE_ELEMENT_LISTS = st.lists(ST_CORE_NODES)
 ST_OBJECT_CORE_FIELD_DICTS = st.dictionaries(st.text(string.ascii_lowercase + "_"), ST_CORE_NODES)
-
-
-def get_num_composites(node):
-    """Get the number of explicit composite nodes in a structure."""
-    if isinstance(node, Token):
-        return 0
-
-    child_num = sum(get_num_composites(child) for child in node.children)
-    if isinstance(node, (struct.Array, struct.Object)):
-        return child_num
-
-    return child_num + 1
 
 
 @hyp.given(ST_ARRAY_CORE_ELEMENT_LISTS)
@@ -66,7 +54,6 @@ def test_array_repr(elements):
     assert isinstance(repr_, str)
     assert re.match(r"Array\(elements=\[.*\]\)", repr_)
     assert all(repr(element) in repr_ for element in elements)
-    assert len(re.findall(r"children=", repr_)) == get_num_composites(array)
 
 
 @hyp.given(ST_OBJECT_CORE_FIELD_DICTS)
@@ -93,7 +80,6 @@ def test_object_repr(fields):
     assert isinstance(repr_, str)
     assert re.match(r"Object\(fields={.*}\)", repr_)
     assert all([f"'{key}': {val!r}" in repr_ for key, val in fields.items()])
-    assert len(re.findall(r"children=", repr_)) == get_num_composites(object_)
 
 
 @hyp.given(ST_OBJECT_CORE_FIELD_DICTS.filter(len))
