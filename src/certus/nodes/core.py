@@ -6,11 +6,13 @@ import typing
 
 from certus import utils
 
+from ._base import BaseNode
+
 NodeType = typing.Union["Composite", "Token"]
 
 
 @dataclasses.dataclass
-class Token:
+class Token(BaseNode):
     """
     Data model for a token leaf node.
 
@@ -46,7 +48,7 @@ class Token:
 
 
 @dataclasses.dataclass
-class Composite:
+class Composite(BaseNode):
     """
     Data model for a node made up of other nodes.
 
@@ -136,19 +138,26 @@ def gather_leaves(node: NodeType) -> list[Token]:
     node : Token or Composite
         A leaf node or one in which to delve for more.
 
+    Raises
+    ------
+    NotImplementedError
+        If anything other than a `BaseNode` is passed.
+
     Returns
     -------
     list of Token
         Leaf nodes in the composite tree.
     """
-    try:
-        return [leaf for child in node.children for leaf in gather_leaves(child)]
+    if not isinstance(node, BaseNode):
+        raise NotImplementedError(f"Invalid node type: {node}, {node.__class__}")
 
-    except AttributeError:
+    if isinstance(node, Token):
         return [node]
 
-    except:
-        raise ValueError(f"Invalid node type: {node}, {node.__class__}")
+    if isinstance(node, Composite) or hasattr(node, "children"):
+        return [leaf for child in node.children for leaf in gather_leaves(child)]
+
+    return [node]
 
 
 def _make_repr(node: NodeType) -> str:

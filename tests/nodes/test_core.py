@@ -201,5 +201,5 @@ def test_gather_leaves_raises_for_other_node_type():
     class NotNode:
         pass
 
-    with pytest.raises(ValueError, match=r"Invalid node type:.*NotNode"):
+    with pytest.raises(NotImplementedError, match=r"Invalid node type:.*NotNode"):
         _ = core.gather_leaves(NotNode())  # type: ignore[reportArgumentType]
