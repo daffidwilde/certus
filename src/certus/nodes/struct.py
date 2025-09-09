@@ -4,22 +4,36 @@ import dataclasses
 import json
 import re
 import typing
+import warnings
 
+from ._base import BaseNode
 from .core import Composite, NodeType, Token, _make_repr
+
+JSONNodeType: typing.TypeAlias = typing.Union["Array", "Object", "Primitive"]
+PrimitiveKindType: typing.TypeAlias = type[int | float | str] | bool | None
+
+BAD_CHARACTERS: str = '\n ,"[]{}'
 
 
 @dataclasses.dataclass
-class Primitive:
+class Primitive(BaseNode):
     """
     Node representing a JSON primitive.
 
     Accepted primitive types are: Boolean, integer, float, string, and
-    null.
+    null. A primitive node is effectively a pointer for another
+    (composite or single-token) node.
+
+    If the provided node is a composite of tokens, we strip out any
+    non-essential tokens as "scaffolding", leaving only the token(s) for
+    the primitive value itself. The stripped node is what this node
+    points at, and it will have identical attributes to that node except
+    its value, which we cast to its Python form.
 
     Parameters
     ----------
-    node : NodeType
-        Node containing the primitive data.
+    node : Token or Composite
+        Node containing the primitive data token(s).
     kind : type[int, float, str] or bool or None
         The type of the primitive, or the Python value for null and
         Boolean primitives.
@@ -28,37 +42,36 @@ class Primitive:
     ----------
     value : bool or int or float or str or None
         Value of the primitive. Taken as the value of `node` cast as the
-        type `kind`.
-    logprob : float
-        Log-probability of `node`.
-    start : int
-        Position of the first character in the primitive. Taken as the
-        minimum of the starts for each leaf node in the composite.
-    confidence : float
-        Confidence of the composite. Derived as the geometric mean of
-        the log-probabilities of all downstream token (leaf) nodes.
+        type `kind`, or `kind` for nulls and Booleans.
     """
 
     node: NodeType
-    kind: type[int | float | str] | bool | None
-
-    BAD_CHARACTERS: typing.ClassVar[str] = '\n ,"['
+    kind: PrimitiveKindType
 
     def __repr__(self) -> str:
-        return _make_repr(self)
+        return _make_repr(self)  # pyright:ignore[reportArgumentType]
 
     def __post_init__(self) -> None:
-        self.node, self._scaffold = self.__class__._separate_scaffolding(self.node)
+        self.node, self._scaffold = self._separate_scaffolding(self.node)
 
-    @classmethod
-    def _separate_scaffolding(cls, node: NodeType) -> tuple[NodeType, NodeType | None]:
+        self.value = self._cast_value(self.node.value, self.kind)
+        self.logprob = self.node.logprob
+        self.start = self.node.start
+        self.confidence = self.node.confidence
+
+        if isinstance(self.node, Composite):
+            self.children = self.node.children
+            self.leaves = self.node.leaves
+
+    @staticmethod
+    def _separate_scaffolding(node: NodeType) -> tuple[NodeType, NodeType | None]:
         """
         Move "bad" tokens from the perimeter of a node into scaffolding.
 
-        Tokens are considered "bad" if they are formed only of
-        characters from the banned list. We scan for bad tokens at the
-        start and end of the node, stopping at each end once we find a
-        non-bad token.
+        Tokens are considered "bad" if they are formed only from the
+        banned character list, `certus.nodes.struct.BAD_CHARACTERS`. We
+        scan for bad tokens at the start and end of the node, stopping
+        at each end once we find a non-bad token.
 
         Parameters
         ----------
@@ -76,68 +89,66 @@ class Primitive:
         if isinstance(node, Token):
             return node, None
 
-        bad_tokens, children = [], list(node.children)
-        for end in (0, -1):
-            while children and cls._check_if_bad_token(children[end]):
-                bad_tokens.append(children.pop(end))
+        good_tokens, bad_tokens = Primitive._scan_for_bad_tokens(node.leaves)
+
+        if not good_tokens:
+            warnings.warn(f"Only scaffolding tokens found in {node=}", UserWarning)
+            return node, None
 
         scaffold = None
-        if len(bad_tokens) == 1:
-            scaffold = bad_tokens[0]
-        if len(bad_tokens) > 1:
-            scaffold = Composite(bad_tokens)
+        if bad_tokens:
+            scaffold = bad_tokens[0] if len(bad_tokens) == 1 else Composite(bad_tokens)
 
-        node = children[0] if len(children) == 1 else Composite(children)
+        node = good_tokens[0] if len(good_tokens) == 1 else Composite(good_tokens)
 
         return node, scaffold
 
-    @classmethod
-    def _check_if_bad_token(cls, token: Token) -> bool:
+    @staticmethod
+    def _scan_for_bad_tokens(leaves: typing.Sequence[Token]) -> tuple[list[Token], list[Token]]:
+        """Look for bad tokens on either end of a leaf sequence."""
+        num_leaves = len(leaves)
+        left, right = 0, num_leaves - 1
+
+        while left < num_leaves and Primitive._check_if_bad_token(leaves[left]):
+            left += 1
+
+        while right >= 0 and Primitive._check_if_bad_token(leaves[right]):
+            right -= 1
+
+        return leaves[left:right + 1], leaves[:left] + leaves[right + 1:]
+
+
+    @staticmethod
+    def _check_if_bad_token(token: Token) -> bool:
+        return bool(re.fullmatch(rf"[{re.escape(BAD_CHARACTERS)}]+", token.value))
+
+    @staticmethod
+    def _cast_value(value: str, kind: PrimitiveKindType) -> bool | int | float | str | None:
         """
-        Check whether a token is made up of only "bad" characters.
+        Attempt to cast a primitive token value to its type.
 
         Parameters
         ----------
-        token : Token
-            Token to check.
+        value : str
+            Token value of the primitive.
+        kind : type of [int | float | str] or bool or None
+            Type of the primitive.
 
         Returns
         -------
-        bool
-            Whether the token is bad or not.
+        bool or int or float or str or None
+            Cast primitive value. If casting fails, the original string
+            value is returned.
         """
-        return bool(re.fullmatch(rf"[{re.escape(cls.BAD_CHARACTERS)}]+", token.value))
+        if kind is None or isinstance(kind, bool):
+            return kind
 
-    @property
-    def value(self) -> bool | int | float | str | None:
-        if self.kind in (None, False, True):
-            return self.kind
-
-        value = self.node.value
         try:
-            return self.kind(json.loads(value))
+            return kind(json.loads(value))
         except json.JSONDecodeError:
-            return self.kind(value)
-
-    @property
-    def logprob(self) -> float:
-        return self.node.logprob
-
-    @property
-    def confidence(self) -> float:
-        return self.node.confidence
-
-    @property
-    def start(self) -> int:
-        return self.node.start
-
-    @property
-    def children(self) -> typing.Sequence[NodeType]:
-        return self.node.children
-
-    @property
-    def leaves(self) -> typing.Sequence[Token]:
-        return self.node.leaves
+            return kind(value)
+        except ValueError:
+            return value
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -151,16 +162,16 @@ class Array(Composite):
         Ordered child nodes representing the array elements.
     """
 
-    elements: list[NodeType] = dataclasses.field(default_factory=list)
+    elements: list[JSONNodeType] = dataclasses.field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.children = self.elements
+        self.children = self.elements  # pyright:ignore[reportAttributeAccessIssue]
         super().__post_init__()
 
-    def __getitem__(self, index: int) -> NodeType:
+    def __getitem__(self, index: int) -> JSONNodeType:
         return self.elements[index]
 
-    def __iter__(self) -> typing.Iterator[NodeType]:
+    def __iter__(self) -> typing.Iterator[JSONNodeType]:
         return iter(self.elements)
 
     def __len__(self) -> int:
@@ -186,13 +197,13 @@ class Object(Composite):
         Stored mapping of field names to parsed nodes.
     """
 
-    fields: dict[str, NodeType] = dataclasses.field(default_factory=dict)
+    fields: dict[str, JSONNodeType] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self.children = list(self.fields.values())
+        self.children = list(self.fields.values())  # pyright:ignore[reportAttributeAccessIssue]
         super().__post_init__()
 
-    def __getitem__(self, key: str) -> NodeType:
+    def __getitem__(self, key: str) -> JSONNodeType:
         return self.fields[key]
 
     def __repr__(self) -> str:
@@ -202,10 +213,10 @@ class Object(Composite):
         """Return the object's field keys."""
         return self.fields.keys()
 
-    def items(self) -> typing.ItemsView[str, NodeType]:
+    def items(self) -> typing.ItemsView[str, JSONNodeType]:
         """Return the object's (key, node) pairs."""
         return self.fields.items()
 
-    def values(self) -> typing.ValuesView[NodeType]:
+    def values(self) -> typing.ValuesView[JSONNodeType]:
         """Return the object's field values."""
         return self.fields.values()

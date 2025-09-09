@@ -6,7 +6,6 @@ import typing
 
 from certus import nodes
 
-JSONNodeType: typing.TypeAlias = nodes.Object | nodes.Array | nodes.Composite | nodes.Token
 JSONPrimitiveType: typing.TypeAlias = None | bool | int | float | str
 JSONDataType: typing.TypeAlias = (
     JSONPrimitiveType | list["JSONDataType"] | dict[str, "JSONDataType"]
@@ -17,7 +16,7 @@ TokenSpanType: typing.TypeAlias = typing.Sequence[nodes.Token]
 
 def parse_json(
     data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType | None = None
-) -> JSONNodeType:
+) -> nodes.struct.JSONNodeType:
     """
     Parse JSON recursively into a node tree.
 
@@ -53,7 +52,7 @@ def parse_json(
 
 def _parse_json(
     data: JSONDataType, tokens: TokenSpanType, dumps_kw: KwargsType, offset: int = 0
-) -> tuple[JSONNodeType, int]:
+) -> tuple[nodes.struct.JSONNodeType, int]:
     """
     Parse JSON into a node tree, tracking position by absolute offset.
 
@@ -73,6 +72,7 @@ def _parse_json(
     int
         Index of first unused token after this subtree.
     """
+    print(f"{data=}\n{offset=}")
     if data is not None and not isinstance(data, (str, bool, int, float, list, dict)):
         raise ValueError(f"Invalid JSON data: {data=}, {type(data)=}")
 
@@ -113,7 +113,7 @@ def _find_token_span(
         Data to parse.
     tokens : sequence of Token
         Token nodes.
-    dumps_kw : dict, optional
+    dumps_kw : dict
         Keyword arguments for `json.dumps()`.
     offset : int
         Index in `tokens` from which to start parsing.
@@ -150,7 +150,7 @@ def _make_regex_from_json(data: JSONDataType, dumps_kw: KwargsType) -> str:
     data : JSON-like
         Data to transform.
     dumps_kw : dict
-        Keyword arguments to pass to `json.dumps()` when dumping `data`.
+        Keyword arguments for `json.dumps()`.
 
     Returns
     -------
